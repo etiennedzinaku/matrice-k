@@ -97,6 +97,13 @@ input.invalid { border-color: var(--warn); }
 button { font-family: var(--font-body); font-size: .86rem; font-weight: 500; height: 40px; padding: 0 14px; border-radius: 4px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer; }
 button:hover { border-color: var(--muted); }
 button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.champ { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); padding: 3px; gap: 3px; }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg label { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 14px; border-radius: 4px; cursor: pointer; font-weight: 500; font-size: .92rem; color: var(--muted); }
+.seg label b { font-family: var(--font-data); font-weight: 600; font-size: .82rem; }
+.seg input:checked + label { background: var(--ink); color: var(--surface); }
+.seg input:focus-visible + label { outline: 2px solid var(--accent); outline-offset: 1px; }
 .status { color: var(--warn); font-size: .9rem; min-height: 1.4em; }
 
 /* Résultats */
@@ -225,6 +232,8 @@ details.method summary:focus-visible { outline: 2px solid var(--accent); outline
   .kpi { padding: 12px 14px; }
   .reading { padding: 12px 14px 16px; font-size: .9rem; }
   .actions button { flex: 1 1 auto; }
+  .seg { display: flex; width: 100%; }
+  .seg label { flex: 1 1 0; flex-direction: column; justify-content: center; gap: 0; padding: 6px 8px; text-align: center; line-height: 1.25; }
   .mk td { white-space: nowrap; }
   .mk td:first-child { white-space: normal; }
   .mk th, .mk td { padding: 8px 4px; font-size: .8rem; }
@@ -252,6 +261,14 @@ img { max-width: 100%; }
       <span>Poisson</span><span>Dixon-Coles</span><span>Binomiale négative</span><span>Poisson bivarié</span>
     </div>
   </header>
+
+  <section class="champ" aria-label="Championnat">
+    <span class="label">Championnat</span>
+    <div class="seg" role="radiogroup" aria-label="Choix du championnat">
+      <input type="radio" name="champ" id="c-ldc" value="ldc"><label for="c-ldc">Ligue des champions <b>3,38</b></label>
+      <input type="radio" name="champ" id="c-ita" value="ita"><label for="c-ita">Championnat d'Italie <b>3,10</b></label>
+    </div>
+  </section>
 
   <div class="banner" id="banner">
     <span>Les champs contiennent un match d'exemple. Remplacez-les par les données de votre rencontre ; les résultats se mettent à jour à chaque saisie.</span>
@@ -324,9 +341,9 @@ img { max-width: 100%; }
   <section class="panel">
     <div class="panel-body settings">
       <label class="field"><span>Moyenne de buts par match du championnat</span>
-        <input id="league" type="number" min="0.5" max="8" step="0.01" placeholder="3,38" inputmode="decimal">
+        <input id="league" type="number" min="0.5" max="8" step="0.01" inputmode="decimal">
       </label>
-      <p class="hint">FC 26 Ligue des champions : <b>3,38</b> (866 buts en 256 matchs). Pour un autre championnat : total de la colonne des buts marqués ÷ (total de la colonne MJ ÷ 2). Si le champ est vide, la valeur 3,38 est utilisée.</p>
+      <p class="hint" id="league-hint"></p>
       <div class="actions">
         <button type="button" id="btn-clear">Effacer les champs</button>
         <button type="button" id="btn-example">Charger l'exemple</button>
@@ -436,9 +453,14 @@ img { max-width: 100%; }
   var EXAMPLE = {
     h: { name: "Équipe A", mp: 25, gf: 47, ga: 36, f1s: 3, f1c: 1, f2s: 2, f2c: 2, f3s: 4, f3c: 1 },
     a: { name: "Équipe B", mp: 25, gf: 40, ga: 49, f1s: 1, f1c: 3, f2s: 2, f2c: 1, f3s: 0, f3c: 2 },
-    league: "3.38"
+    league: "3.38", champ: "ldc"
   };
-  var DEFAULT_LEAGUE = 3.38;   // FC 26 Ligue des champions : 866 buts / 256 matchs
+  // Moyenne de buts par match de chaque championnat (capture du tableau 1xbet)
+  var LEAGUES = {
+    ldc: { name: "Ligue des champions", avg: 3.38, note: "866 buts en 256 matchs" },
+    ita: { name: "Championnat d'Italie", avg: 3.10, note: "601 buts en 194 matchs" }
+  };
+  var DEFAULT_CHAMP = "ldc";
   var FORM_W = [0.5, 0.3, 0.2];
   var FORM_GAME_VALUE = 1.5;   // un match récent vaut 1,5 match de saison
   var PRIOR_GAMES = 15;        // calibré sur les 249 matchs du championnat
@@ -446,7 +468,7 @@ img { max-width: 100%; }
   var NB_SIZE = 10;
   var BP_COV = 0.08;
   var N = 11; // scores 0..10
-  var STORE_KEY = "prevision-score-v3";
+  var STORE_KEY = "prevision-score-v4";
 
   var $ = function (id) { return document.getElementById(id); };
   var isExample = false;
@@ -570,7 +592,7 @@ img { max-width: 100%; }
     $("results").style.opacity = "1";
 
     var leagueOk = leagueIn != null && leagueIn > 0.3 && leagueIn < 8;
-    var L = (leagueOk ? leagueIn : DEFAULT_LEAGUE) / 2;
+    var L = (leagueOk ? leagueIn : LEAGUES[champ()].avg) / 2;
 
     var rH = rates(H, L), rA = rates(A, L);
     var lh = Math.max(0.05, rH.gf * rA.ga / L);
@@ -703,12 +725,20 @@ img { max-width: 100%; }
   }
 
   // ---------- État ----------
+  function champ() { var c = document.querySelector('input[name="champ"]:checked'); return c && LEAGUES[c.value] ? c.value : DEFAULT_CHAMP; }
+  function showChamp(id) {
+    var lg = LEAGUES[id], avg = num(lg.avg);
+    $("c-" + id).checked = true;
+    $("league").placeholder = avg;
+    $("league-hint").innerHTML = "FC 26 " + lg.name + " : <b>" + avg + "</b> (" + lg.note + "). Pour mettre à jour : total de la colonne des buts marqués ÷ (total de la colonne MJ ÷ 2). Si le champ est vide, la valeur " + avg + " est utilisée.";
+  }
   function fill(data) {
     ["h", "a"].forEach(function (p) { FIELDS.forEach(function (f) { var v = data[p][f]; $(p + "-" + f).value = v == null ? "" : v; }); });
     $("league").value = data.league == null ? "" : data.league;
+    showChamp(LEAGUES[data.champ] ? data.champ : DEFAULT_CHAMP);
   }
   function snapshot() {
-    var d = { h: {}, a: {}, league: $("league").value };
+    var d = { h: {}, a: {}, league: $("league").value, champ: champ() };
     ["h", "a"].forEach(function (p) { FIELDS.forEach(function (f) { d[p][f] = $(p + "-" + f).value; }); });
     return d;
   }
@@ -717,12 +747,13 @@ img { max-width: 100%; }
 
   document.addEventListener("input", function (e) {
     if (!e.target.matches("input")) return;
-    if (isExample && e.target.id !== "league") setExample(false);
+    if (e.target.name === "champ") { showChamp(e.target.value); $("league").value = LEAGUES[e.target.value].avg.toFixed(2); }
+    else if (isExample && e.target.id !== "league") setExample(false);
     compute(); save();
   });
   $("btn-example").addEventListener("click", function () { fill(EXAMPLE); setExample(true); compute(); save(); });
   $("btn-clear").addEventListener("click", function () {
-    fill({ h: { name: "" }, a: { name: "" }, league: $("league").value });
+    fill({ h: { name: "" }, a: { name: "" }, league: $("league").value, champ: champ() });
     setExample(false); compute(); save(); $("h-name").focus();
   });
 
