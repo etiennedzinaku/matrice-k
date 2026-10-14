@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Prévision Score Exact</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: poste d'analyse — saisie à deux colonnes (domicile / extérieur), puis tableau de bord de résultats du résumé vers le détail */
+:root {
+  --bg: #F2F4F7;
+  --surface: #FFFFFF;
+  --surface-2: #F7F9FB;
+  --ink: #111923;
+  --muted: #5A6574;
+  --line: #DCE1E8;
+  --home: #1F4A9E;
+  --away: #A8640A;
+  --draw: #6B7686;
+  --accent: #0E7552;
+  --warn: #B4471F;
+  --font-display: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+  --font-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0C1118; --surface: #141B25; --surface-2: #19212C; --ink: #E5EAF0; --muted: #8F9BAB;
+    --line: #283342; --home: #86A9F2; --away: #EEAE4C; --draw: #9AA5B4; --accent: #3BC48F; --warn: #F08A62;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0C1118; --surface: #141B25; --surface-2: #19212C; --ink: #E5EAF0; --muted: #8F9BAB;
+  --line: #283342; --home: #86A9F2; --away: #EEAE4C; --draw: #9AA5B4; --accent: #3BC48F; --warn: #F08A62;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: var(--font-body); font-size: 15px; line-height: 1.5;
+  padding-inline: 16px;
+}
+.wrap { max-width: 1180px; margin-inline: auto; padding-block: 28px 56px; display: grid; gap: 22px; }
+
+/* En-tête */
+.top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px; padding-bottom: 18px; border-bottom: 1px solid var(--line); }
+.top h1 { font-family: var(--font-display); font-weight: 700; font-size: 2.1rem; letter-spacing: .02em; text-transform: uppercase; margin: 0; line-height: 1; text-wrap: balance; }
+.top p { margin: 6px 0 0; color: var(--muted); font-size: .9rem; }
+.models { display: flex; flex-wrap: wrap; gap: 6px; }
+.models span { font-family: var(--font-data); font-size: .72rem; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); border: 1px solid var(--line); padding: 3px 8px; border-radius: 3px; background: var(--surface); }
+
+.label { font-size: .72rem; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; }
+.panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 18px; border-bottom: 1px solid var(--line); }
+.panel-head h2 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1.15rem; letter-spacing: .04em; text-transform: uppercase; }
+.panel-body { padding: 16px 18px 18px; }
+
+/* Saisie */
+.banner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; border: 1px dashed var(--line); border-radius: 6px; color: var(--muted); font-size: .88rem; background: var(--surface-2); }
+.teams { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.team { min-width: 0; }
+.team-id { display: flex; align-items: center; gap: 10px; padding: 14px 18px; border-bottom: 1px solid var(--line); }
+.chip { flex: none; font-family: var(--font-data); font-size: .7rem; font-weight: 600; letter-spacing: .08em; padding: 3px 7px; border-radius: 3px; color: var(--surface); }
+.team.home .chip { background: var(--home); }
+.team.away .chip { background: var(--away); }
+.team-id input { flex: 1; min-width: 0; border: 0; background: transparent; font-family: var(--font-display); font-size: 1.45rem; font-weight: 600; color: var(--ink); padding: 2px 4px; border-radius: 3px; }
+.team-id input:focus-visible { outline: 2px solid var(--accent); }
+.block { padding: 14px 18px; display: grid; gap: 10px; }
+.block + .block { border-top: 1px solid var(--line); }
+.season { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.field { display: grid; gap: 5px; min-width: 0; }
+.field span { font-size: .78rem; color: var(--muted); }
+input[type="number"], select {
+  width: 100%; height: 40px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface-2);
+  color: var(--ink); font-family: var(--font-data); font-size: 1rem; text-align: center; padding: 0 8px;
+  font-variant-numeric: tabular-nums;
+}
+select { text-align: left; font-family: var(--font-body); font-size: .92rem; }
+input[type="number"]:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; border-color: transparent; }
+input.invalid { border-color: var(--warn); }
+.form-grid { display: grid; grid-template-columns: minmax(0, 1fr) 92px 92px; gap: 8px 10px; align-items: center; }
+.form-grid .h { font-size: .72rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); text-align: center; }
+.form-grid .r { font-size: .9rem; }
+.form-grid .r small { display: block; color: var(--muted); font-size: .75rem; }
+.settings { display: grid; grid-template-columns: minmax(0, 260px) minmax(0, 1fr) auto; gap: 14px 18px; align-items: end; }
+.hint { margin: 0; font-size: .82rem; color: var(--muted); max-width: 70ch; align-self: center; }
+.hint b { color: var(--ink); font-family: var(--font-data); }
+.range-row { display: flex; align-items: center; gap: 10px; height: 40px; }
+.range-row input { flex: 1; accent-color: var(--accent); }
+.range-row output { font-family: var(--font-data); font-size: .95rem; min-width: 3.2em; text-align: right; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; }
+button { font-family: var(--font-body); font-size: .86rem; font-weight: 500; height: 40px; padding: 0 14px; border-radius: 4px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer; }
+button:hover { border-color: var(--muted); }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.status { color: var(--warn); font-size: .9rem; min-height: 1.4em; }
+
+/* Résultats */
+.board { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 18px; padding: 22px 22px 18px; }
+.side { min-width: 0; display: grid; gap: 4px; }
+.side.right { text-align: right; }
+.side .nm { font-family: var(--font-display); font-weight: 600; font-size: 1.6rem; line-height: 1.1; overflow-wrap: anywhere; }
+.side.left .nm { color: var(--home); }
+.side.right .nm { color: var(--away); }
+.side .xg { font-family: var(--font-data); font-size: .88rem; color: var(--muted); }
+.side .xg b { color: var(--ink); font-weight: 600; }
+.score { text-align: center; }
+.score .big { font-family: var(--font-display); font-weight: 700; font-size: 4.4rem; line-height: .95; font-variant-numeric: tabular-nums; letter-spacing: .02em; }
+.score .sub { font-family: var(--font-data); font-size: .8rem; color: var(--muted); margin-top: 6px; }
+.kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid var(--line); }
+.kpi { padding: 14px 18px; display: grid; gap: 4px; min-width: 0; }
+.kpi + .kpi { border-left: 1px solid var(--line); }
+.kpi .v { font-family: var(--font-data); font-size: 1.25rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.kpi .d { font-size: .8rem; color: var(--muted); }
+.pill { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-data); font-size: .78rem; font-weight: 600; padding: 3px 9px; border-radius: 999px; border: 1px solid currentColor; width: fit-content; }
+.pill.hi { color: var(--accent); }
+.pill.mid { color: var(--away); }
+.pill.lo { color: var(--warn); }
+.reading { padding: 14px 22px 18px; border-top: 1px solid var(--line); color: var(--ink); font-size: .95rem; max-width: 90ch; }
+
+.bar1x2 { display: flex; height: 38px; border-radius: 4px; overflow: hidden; }
+.bar1x2 div { display: flex; align-items: center; justify-content: center; font-family: var(--font-data); font-size: .82rem; font-weight: 600; color: var(--surface); min-width: 0; overflow: hidden; white-space: nowrap; transition: flex-basis .4s ease; }
+.seg-h { background: var(--home); } .seg-d { background: var(--draw); } .seg-a { background: var(--away); }
+.legend1x2 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
+.legend1x2 > div { display: grid; gap: 2px; min-width: 0; }
+.legend1x2 .t { font-size: .8rem; color: var(--muted); overflow-wrap: anywhere; }
+.legend1x2 .p { font-family: var(--font-data); font-size: 1.1rem; font-weight: 600; }
+.legend1x2 .o { font-family: var(--font-data); font-size: .78rem; color: var(--muted); }
+.legend1x2 > div:nth-child(2) { text-align: center; }
+.legend1x2 > div:nth-child(3) { text-align: right; }
+
+.grid2 { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 18px; }
+.grid2b { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; }
+.scroll { overflow-x: auto; }
+
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+.matrix th, .matrix td { text-align: center; font-family: var(--font-data); font-size: .8rem; padding: 0; }
+.matrix th { color: var(--muted); font-weight: 500; height: 30px; }
+.matrix td { height: 46px; min-width: 52px; border: 1px solid var(--surface); }
+.matrix td.best { outline: 2px solid var(--ink); outline-offset: -2px; font-weight: 600; }
+.axis { font-size: .74rem; color: var(--muted); font-family: var(--font-body); }
+.axis-row { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+.axis-row b.h { color: var(--home); } .axis-row b.a { color: var(--away); }
+
+.top-list { display: grid; gap: 2px; }
+.top-row { display: grid; grid-template-columns: 26px 64px minmax(0, 1fr) 64px 54px; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line); font-family: var(--font-data); font-size: .88rem; }
+.top-row:last-child { border-bottom: 0; }
+.top-row .rk { color: var(--muted); font-size: .76rem; }
+.top-row .sc { font-family: var(--font-display); font-size: 1.35rem; font-weight: 600; }
+.top-row .track { height: 8px; background: var(--surface-2); border-radius: 2px; overflow: hidden; }
+.top-row .fill { height: 100%; background: var(--accent); }
+.top-row .pc { text-align: right; font-weight: 600; }
+.top-row .od { text-align: right; color: var(--muted); font-size: .78rem; }
+.top-head { font-family: var(--font-body); font-size: .7rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding-top: 0; }
+.top-head .sc { font-family: var(--font-body); font-size: .7rem; font-weight: 600; }
+
+.dist { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 8px; align-items: end; height: 190px; padding-top: 22px; border-bottom: 1px solid var(--line); }
+.dist .col { display: flex; flex-direction: column; justify-content: flex-end; align-items: center; height: 100%; min-width: 0; }
+.dist .val { font-family: var(--font-data); font-size: .72rem; color: var(--muted); margin-bottom: 4px; white-space: nowrap; }
+.dist .bar { width: 100%; max-width: 46px; background: color-mix(in srgb, var(--accent) 45%, var(--surface)); border-radius: 2px 2px 0 0; transition: height .4s ease; }
+.dist .col.max .bar { background: var(--accent); }
+.dist .col.max .val { color: var(--ink); font-weight: 600; }
+.dist-x { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 8px; margin-top: 6px; text-align: center; font-family: var(--font-data); font-size: .8rem; }
+.dist-note { margin-top: 14px; font-size: .88rem; color: var(--muted); }
+.dist-note b { color: var(--ink); font-family: var(--font-data); }
+
+.mk th, .mk td { padding: 8px 6px; border-bottom: 1px solid var(--line); text-align: right; font-size: .86rem; }
+.mk th:first-child, .mk td:first-child { text-align: left; }
+.mk th { font-size: .7rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.mk td { font-family: var(--font-data); }
+.mk td:first-child { font-family: var(--font-body); }
+.mk tr.sep td { border-bottom-color: var(--muted); }
+.mk td.strong { font-weight: 600; color: var(--accent); }
+
+.cmp th, .cmp td { padding: 9px 10px; border-bottom: 1px solid var(--line); text-align: right; font-size: .85rem; white-space: nowrap; }
+.cmp th:first-child, .cmp td:first-child { text-align: left; }
+.cmp th { font-size: .7rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.cmp td { font-family: var(--font-data); }
+.cmp td:first-child { font-family: var(--font-body); }
+.cmp td:first-child small { color: var(--muted); display: block; font-size: .74rem; }
+.cmp tr.final td { font-weight: 600; background: var(--surface-2); }
+
+details.method { padding: 0; }
+details.method summary { cursor: pointer; padding: 14px 18px; font-family: var(--font-display); font-weight: 600; font-size: 1.15rem; letter-spacing: .04em; text-transform: uppercase; list-style: none; display: flex; justify-content: space-between; }
+details.method summary::after { content: "+"; font-family: var(--font-data); color: var(--muted); }
+details.method[open] summary::after { content: "−"; }
+details.method summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.method-body { padding: 4px 18px 18px; display: grid; gap: 12px; max-width: 82ch; font-size: .92rem; }
+.method-body h3 { margin: 6px 0 0; font-size: .95rem; }
+.method-body p { margin: 0; color: var(--muted); }
+.method-body code { font-family: var(--font-data); font-size: .84rem; color: var(--ink); background: var(--surface-2); padding: 1px 5px; border-radius: 3px; }
+.foot { font-size: .8rem; color: var(--muted); }
+
+@media (max-width: 900px) {
+  .grid2, .grid2b { grid-template-columns: minmax(0, 1fr); }
+  .settings { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .settings .actions { grid-column: 1 / -1; }
+}
+@media (max-width: 760px) {
+  .teams { grid-template-columns: minmax(0, 1fr); }
+  .kpis { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .kpi:nth-child(3) { border-left: 0; }
+  .kpi:nth-child(n+3) { border-top: 1px solid var(--line); }
+}
+@media (max-width: 520px) {
+  .board { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); padding: 18px 16px; }
+  .score { grid-column: 1 / -1; grid-row: 1; }
+  .score .big { font-size: 3.6rem; }
+  .side .nm { font-size: 1.3rem; }
+  .settings { grid-template-columns: minmax(0, 1fr); }
+  .form-grid { grid-template-columns: minmax(0, 1fr) 72px 72px; }
+  .top-row { grid-template-columns: 20px 54px minmax(0, 1fr) 58px; }
+  .top-row .od { display: none; }
+  .dist .val { font-size: .62rem; }
+  .panel-body { padding: 14px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; }
+}
+[hidden] { display: none !important; }
+body { margin: 0; }
+img { max-width: 100%; }
+</style>
+
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Prévision Score Exact</h1>
+      <p>Probabilités de score et de nombre de buts à partir des statistiques de saison et de la forme récente.</p>
+    </div>
+    <div class="models" aria-label="Modèles utilisés">
+      <span>Poisson</span><span>Dixon-Coles</span><span>Binomiale négative</span><span>Poisson bivarié</span>
+    </div>
+  </header>
+
+  <div class="banner" id="banner">
+    <span>Les champs contiennent un match d'exemple. Remplacez-les par les données de votre rencontre ; les résultats se mettent à jour à chaque saisie.</span>
+  </div>
+
+  <section class="teams" aria-label="Données des équipes">
+    <!-- Équipe à domicile -->
+    <div class="panel team home">
+      <div class="team-id">
+        <span class="chip">DOM</span>
+        <input id="h-name" type="text" aria-label="Nom de l'équipe à domicile" autocomplete="off">
+      </div>
+      <div class="block">
+        <span class="label">Saison</span>
+        <div class="season">
+          <label class="field"><span>Matchs joués</span><input id="h-mp" type="number" min="1" step="1" inputmode="numeric"></label>
+          <label class="field"><span>Buts marqués</span><input id="h-gf" type="number" min="0" step="1" inputmode="numeric"></label>
+          <label class="field"><span>Buts encaissés</span><input id="h-ga" type="number" min="0" step="1" inputmode="numeric"></label>
+        </div>
+      </div>
+      <div class="block">
+        <span class="label">Forme récente</span>
+        <div class="form-grid">
+          <span></span><span class="h">Marqués</span><span class="h">Encaissés</span>
+          <span class="r">Dernier match</span>
+          <input id="h-f1s" type="number" min="0" step="1" inputmode="numeric" aria-label="Dernier match, buts marqués">
+          <input id="h-f1c" type="number" min="0" step="1" inputmode="numeric" aria-label="Dernier match, buts encaissés">
+          <span class="r">Avant-dernier match</span>
+          <input id="h-f2s" type="number" min="0" step="1" inputmode="numeric" aria-label="Avant-dernier match, buts marqués">
+          <input id="h-f2c" type="number" min="0" step="1" inputmode="numeric" aria-label="Avant-dernier match, buts encaissés">
+          <span class="r">3<sup>e</sup> dernier match</span>
+          <input id="h-f3s" type="number" min="0" step="1" inputmode="numeric" aria-label="3e dernier match, buts marqués">
+          <input id="h-f3c" type="number" min="0" step="1" inputmode="numeric" aria-label="3e dernier match, buts encaissés">
+        </div>
+      </div>
+    </div>
+
+    <!-- Équipe à l'extérieur -->
+    <div class="panel team away">
+      <div class="team-id">
+        <span class="chip">EXT</span>
+        <input id="a-name" type="text" aria-label="Nom de l'équipe à l'extérieur" autocomplete="off">
+      </div>
+      <div class="block">
+        <span class="label">Saison</span>
+        <div class="season">
+          <label class="field"><span>Matchs joués</span><input id="a-mp" type="number" min="1" step="1" inputmode="numeric"></label>
+          <label class="field"><span>Buts marqués</span><input id="a-gf" type="number" min="0" step="1" inputmode="numeric"></label>
+          <label class="field"><span>Buts encaissés</span><input id="a-ga" type="number" min="0" step="1" inputmode="numeric"></label>
+        </div>
+      </div>
+      <div class="block">
+        <span class="label">Forme récente</span>
+        <div class="form-grid">
+          <span></span><span class="h">Marqués</span><span class="h">Encaissés</span>
+          <span class="r">Dernier match</span>
+          <input id="a-f1s" type="number" min="0" step="1" inputmode="numeric" aria-label="Dernier match, buts marqués">
+          <input id="a-f1c" type="number" min="0" step="1" inputmode="numeric" aria-label="Dernier match, buts encaissés">
+          <span class="r">Avant-dernier match</span>
+          <input id="a-f2s" type="number" min="0" step="1" inputmode="numeric" aria-label="Avant-dernier match, buts marqués">
+          <input id="a-f2c" type="number" min="0" step="1" inputmode="numeric" aria-label="Avant-dernier match, buts encaissés">
+          <span class="r">3<sup>e</sup> dernier match</span>
+          <input id="a-f3s" type="number" min="0" step="1" inputmode="numeric" aria-label="3e dernier match, buts marqués">
+          <input id="a-f3c" type="number" min="0" step="1" inputmode="numeric" aria-label="3e dernier match, buts encaissés">
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-body settings">
+      <label class="field"><span>Moyenne de buts par match du championnat</span>
+        <input id="league" type="number" min="0.5" max="8" step="0.01" placeholder="3,38" inputmode="decimal">
+      </label>
+      <p class="hint">FC 26 Ligue des champions : <b>3,38</b> (866 buts en 256 matchs). Pour un autre championnat : total de la colonne des buts marqués ÷ (total de la colonne MJ ÷ 2). Si le champ est vide, la valeur 3,38 est utilisée.</p>
+      <div class="actions">
+        <button type="button" id="btn-clear">Effacer les champs</button>
+        <button type="button" id="btn-example">Charger l'exemple</button>
+      </div>
+    </div>
+  </section>
+
+  <div class="status" id="status" role="status"></div>
+
+  <div id="results" style="display:grid; gap:22px;">
+    <!-- Tableau de score -->
+    <section class="panel">
+      <div class="board">
+        <div class="side left"><span class="label">Domicile</span><span class="nm" id="r-hname"></span><span class="xg">Buts attendus <b id="r-hxg"></b></span></div>
+        <div class="score"><span class="label">Score le plus probable</span><div class="big" id="r-score"></div><div class="sub" id="r-scorep"></div></div>
+        <div class="side right"><span class="label">Extérieur</span><span class="nm" id="r-aname"></span><span class="xg">Buts attendus <b id="r-axg"></b></span></div>
+      </div>
+      <div class="kpis">
+        <div class="kpi"><span class="label">Total de buts attendu</span><span class="v" id="k-total"></span><span class="d" id="k-total-d"></span></div>
+        <div class="kpi"><span class="label">Nombre de buts le plus probable</span><span class="v" id="k-mode"></span><span class="d" id="k-mode-d"></span></div>
+        <div class="kpi"><span class="label">Les deux équipes marquent</span><span class="v" id="k-btts"></span><span class="d" id="k-btts-d"></span></div>
+        <div class="kpi"><span class="label">Indice de confiance</span><span id="k-conf"></span><span class="d" id="k-conf-d"></span></div>
+      </div>
+      <div class="reading" id="reading"></div>
+    </section>
+
+    <!-- 1N2 -->
+    <section class="panel">
+      <div class="panel-head"><h2>Résultat 1 N 2</h2><span class="label">Cote juste = 1 / probabilité</span></div>
+      <div class="panel-body">
+        <div class="bar1x2" aria-hidden="true"><div class="seg-h" id="b-h"></div><div class="seg-d" id="b-d"></div><div class="seg-a" id="b-a"></div></div>
+        <div class="legend1x2">
+          <div><span class="t" id="l-hname"></span><span class="p" id="l-h"></span><span class="o" id="l-ho"></span></div>
+          <div><span class="t">Match nul</span><span class="p" id="l-d"></span><span class="o" id="l-do"></span></div>
+          <div><span class="t" id="l-aname"></span><span class="p" id="l-a"></span><span class="o" id="l-ao"></span></div>
+        </div>
+      </div>
+    </section>
+
+    <div class="grid2">
+      <section class="panel">
+        <div class="panel-head"><h2>Matrice des scores</h2><span class="label">Probabilité en %</span></div>
+        <div class="panel-body">
+          <div class="axis-row axis"><span>Lignes : buts <b class="h" id="ax-h"></b></span><span>Colonnes : buts <b class="a" id="ax-a"></b></span></div>
+          <div class="scroll"><table class="matrix" id="matrix"></table></div>
+        </div>
+      </section>
+      <section class="panel">
+        <div class="panel-head"><h2>Scores exacts</h2><span class="label">Top 8</span></div>
+        <div class="panel-body">
+          <div class="top-list" id="toplist"></div>
+        </div>
+      </section>
+    </div>
+
+    <div class="grid2b">
+      <section class="panel">
+        <div class="panel-head"><h2>Nombre total de buts</h2><span class="label">Distribution</span></div>
+        <div class="panel-body">
+          <div class="dist" id="dist"></div>
+          <div class="dist-x" id="dist-x"></div>
+          <div class="dist-note" id="dist-note"></div>
+        </div>
+      </section>
+      <section class="panel">
+        <div class="panel-head"><h2>Marchés de buts</h2><span class="label">Prob. · cote juste</span></div>
+        <div class="panel-body scroll">
+          <table class="mk" id="markets"></table>
+        </div>
+      </section>
+    </div>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Comparaison des modèles</h2><span class="label">Ensemble pondéré</span></div>
+      <div class="panel-body scroll">
+        <table class="cmp" id="cmp"></table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <details class="method">
+        <summary>Méthodologie</summary>
+        <div class="method-body">
+          <h3>1. Forces d'attaque et de défense</h3>
+          <p>Pour chaque équipe, on calcule les buts marqués et encaissés par match sur la saison. Ces moyennes sont rapprochées de la moyenne du championnat avec un a priori de 15 matchs (<code>(buts + 15 × moyenne) / (matchs + 15)</code>). Ce réglage vient d'un test sur les 249 matchs de la FC 26 Ligue des champions : en football virtuel, les écarts entre équipes sont plus instables qu'en vrai football, et un lissage fort prédit mieux.</p>
+          <h3>2. Forme récente</h3>
+          <p>Les trois derniers matchs sont pondérés 50 % / 30 % / 20 % (le plus récent pèse le plus). Leur poids est calculé automatiquement : chaque match récent compte comme 1,5 match de saison, soit environ 15 % du total après 25 matchs et jusqu'à 40 % en début de saison.</p>
+          <h3>3. Buts attendus</h3>
+          <p>Méthode de Maher : <code>λ dom = attaque dom × défense ext / moyenne</code>, et inversement. Aucun bonus n'est donné à l'équipe qui reçoit : sur les 249 matchs testés, un avantage du terrain dégradait les prédictions. En football virtuel, il n'y a ni public ni déplacement.</p>
+          <h3>4. Quatre modèles de score</h3>
+          <p><b>Poisson</b> : buts indépendants suivant une loi de Poisson. <b>Dixon-Coles</b> (1997) : corrige la sous-estimation des scores serrés 0-0, 1-1, 1-0, 0-1 (ρ = −0,15, valeur calibrée sur le championnat). <b>Binomiale négative</b> : prend en compte la surdispersion, c'est-à-dire les matchs plus ouverts que ne le prévoit Poisson. <b>Poisson bivarié</b> (Karlis &amp; Ntzoufras, 2003) : introduit une corrélation entre les buts des deux équipes.</p>
+          <h3>5. Ensemble</h3>
+          <p>La matrice finale est la moyenne pondérée des quatre : Dixon-Coles 35 %, Poisson bivarié 25 %, Poisson 20 %, binomiale négative 20 %. Toutes les probabilités affichées en découlent.</p>
+          <h3>6. Indice de confiance</h3>
+          <p>Il combine la taille de l'échantillon (matchs joués), la cohérence entre forme récente et saison, et la netteté du pronostic 1 N 2. Un indice faible signale un match difficile à lire, pas une erreur de calcul.</p>
+          <p class="foot">Ces chiffres sont des probabilités. Même le score le plus probable sort rarement plus d'une fois sur six ou sept : un pronostic de score exact se juge sur un grand nombre de matchs, jamais sur un seul. Le modèle ne connaît ni les blessures, ni les suspensions, ni la motivation.</p>
+        </div>
+      </details>
+    </section>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var FIELDS = ["name", "mp", "gf", "ga", "f1s", "f1c", "f2s", "f2c", "f3s", "f3c"];
+  var EXAMPLE = {
+    h: { name: "Équipe A", mp: 25, gf: 47, ga: 36, f1s: 3, f1c: 1, f2s: 2, f2c: 2, f3s: 4, f3c: 1 },
+    a: { name: "Équipe B", mp: 25, gf: 40, ga: 49, f1s: 1, f1c: 3, f2s: 2, f2c: 1, f3s: 0, f3c: 2 },
+    league: "3.38"
+  };
+  var DEFAULT_LEAGUE = 3.38;   // FC 26 Ligue des champions : 866 buts / 256 matchs
+  var FORM_W = [0.5, 0.3, 0.2];
+  var FORM_GAME_VALUE = 1.5;   // un match récent vaut 1,5 match de saison
+  var PRIOR_GAMES = 15;        // calibré sur les 249 matchs du championnat
+  var RHO = -0.15;
+  var NB_SIZE = 10;
+  var BP_COV = 0.08;
+  var N = 11; // scores 0..10
+  var STORE_KEY = "prevision-score-v3";
+
+  var $ = function (id) { return document.getElementById(id); };
+  var isExample = false;
+
+  // ---------- Formatage ----------
+  function pct(p, d) { return (p * 100).toFixed(d == null ? 1 : d).replace(".", ",") + " %"; }
+  function num(x, d) { return x.toFixed(d == null ? 2 : d).replace(".", ","); }
+  function odds(p) { return p > 0.0005 ? num(1 / p, 2) : "—"; }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+
+  // ---------- Lecture des champs ----------
+  function val(id) {
+    var v = $(id).value.trim().replace(",", ".");
+    if (v === "") return null;
+    var n = Number(v);
+    return isFinite(n) ? n : NaN;
+  }
+  function readTeam(p) {
+    var t = { name: $(p + "-name").value.trim() || (p === "h" ? "Domicile" : "Extérieur"), form: [] };
+    t.mp = val(p + "-mp"); t.gf = val(p + "-gf"); t.ga = val(p + "-ga");
+    for (var i = 1; i <= 3; i++) t.form.push([val(p + "-f" + i + "s"), val(p + "-f" + i + "c")]);
+    return t;
+  }
+  function validate(t, p) {
+    var ok = true;
+    function mark(id, bad) { $(id).classList.toggle("invalid", bad); if (bad) ok = false; }
+    mark(p + "-mp", t.mp == null || !(t.mp >= 1));
+    mark(p + "-gf", t.gf == null || !(t.gf >= 0));
+    mark(p + "-ga", t.ga == null || !(t.ga >= 0));
+    for (var i = 0; i < 3; i++) {
+      mark(p + "-f" + (i + 1) + "s", t.form[i][0] != null && !(t.form[i][0] >= 0));
+      mark(p + "-f" + (i + 1) + "c", t.form[i][1] != null && !(t.form[i][1] >= 0));
+    }
+    return ok;
+  }
+
+  // ---------- Taux de buts ----------
+  function formRate(t, k) {
+    var s = 0, w = 0;
+    for (var i = 0; i < 3; i++) {
+      var g = t.form[i][k];
+      if (g != null && g >= 0) { s += FORM_W[i] * g; w += FORM_W[i]; }
+    }
+    return w > 0 ? s / w : null;
+  }
+  function rates(t, L) {
+    var fv = 3 * FORM_GAME_VALUE;
+    var wForm = Math.min(0.4, Math.max(0.15, fv / (t.mp + fv)));
+    var sGF = (t.gf + PRIOR_GAMES * L) / (t.mp + PRIOR_GAMES);
+    var sGA = (t.ga + PRIOR_GAMES * L) / (t.mp + PRIOR_GAMES);
+    var fGF = formRate(t, 0), fGA = formRate(t, 1);
+    return {
+      sGF: sGF, sGA: sGA, fGF: fGF, fGA: fGA, wForm: wForm,
+      gf: fGF == null ? sGF : (1 - wForm) * sGF + wForm * fGF,
+      ga: fGA == null ? sGA : (1 - wForm) * sGA + wForm * fGA
+    };
+  }
+
+  // ---------- Lois ----------
+  var FACT = [1]; for (var i = 1; i < 40; i++) FACT[i] = FACT[i - 1] * i;
+  function poisVec(l) { var v = [], p = Math.exp(-l); for (var k = 0; k < N; k++) { v.push(p); p = p * l / (k + 1); } return v; }
+  function nbVec(m, r) { var v = [], p = Math.pow(r / (r + m), r); for (var k = 0; k < N; k++) { v.push(p); p = p * (k + r) / (k + 1) * (m / (r + m)); } return v; }
+  function outer(a, b) { var M = []; for (var i = 0; i < N; i++) { M.push([]); for (var j = 0; j < N; j++) M[i].push(a[i] * b[j]); } return M; }
+  function normalize(M) { var s = 0, i, j; for (i = 0; i < N; i++) for (j = 0; j < N; j++) s += M[i][j]; for (i = 0; i < N; i++) for (j = 0; j < N; j++) M[i][j] /= s; return M; }
+
+  function mPoisson(lh, la) { return normalize(outer(poisVec(lh), poisVec(la))); }
+  function mDixonColes(lh, la) {
+    var M = outer(poisVec(lh), poisVec(la));
+    M[0][0] *= Math.max(0, 1 - lh * la * RHO);
+    M[0][1] *= Math.max(0, 1 + lh * RHO);
+    M[1][0] *= Math.max(0, 1 + la * RHO);
+    M[1][1] *= Math.max(0, 1 - RHO);
+    return normalize(M);
+  }
+  function mNegBin(lh, la) { return normalize(outer(nbVec(lh, NB_SIZE), nbVec(la, NB_SIZE))); }
+  function mBivPoisson(lh, la) {
+    var l3 = Math.min(BP_COV, 0.4 * Math.min(lh, la));
+    var l1 = lh - l3, l2 = la - l3, M = [];
+    var base = Math.exp(-(l1 + l2 + l3));
+    for (var x = 0; x < N; x++) {
+      M.push([]);
+      for (var y = 0; y < N; y++) {
+        var s = 0;
+        for (var k = 0; k <= Math.min(x, y); k++) {
+          s += Math.pow(l1, x - k) / FACT[x - k] * Math.pow(l2, y - k) / FACT[y - k] * Math.pow(l3, k) / FACT[k];
+        }
+        M[x].push(base * s);
+      }
+    }
+    return normalize(M);
+  }
+
+  function summarize(M) {
+    var r = { h: 0, d: 0, a: 0, btts: 0, csH: 0, csA: 0, tot: [], best: [0, 0], bestP: 0 };
+    for (var k = 0; k < 2 * N; k++) r.tot.push(0);
+    for (var i = 0; i < N; i++) for (var j = 0; j < N; j++) {
+      var p = M[i][j];
+      if (i > j) r.h += p; else if (i === j) r.d += p; else r.a += p;
+      if (i > 0 && j > 0) r.btts += p;
+      if (j === 0) r.csH += p;
+      if (i === 0) r.csA += p;
+      r.tot[i + j] += p;
+      if (p > r.bestP) { r.bestP = p; r.best = [i, j]; }
+    }
+    r.over = function (x) { var s = 0; for (var k = 0; k < r.tot.length; k++) if (k > x) s += r.tot[k]; return s; };
+    return r;
+  }
+
+  // ---------- Calcul principal ----------
+  function compute() {
+    var H = readTeam("h"), A = readTeam("a");
+    var okH = validate(H, "h"), okA = validate(A, "a");
+    var leagueIn = val("league");
+    $("league").classList.toggle("invalid", leagueIn != null && !(leagueIn > 0.3 && leagueIn < 8));
+    if (!okH || !okA) {
+      $("status").textContent = "Renseignez les matchs joués (au moins 1) et les buts marqués et encaissés de la saison pour les deux équipes. Les valeurs doivent être positives.";
+      $("results").style.opacity = ".35";
+      return;
+    }
+    $("status").textContent = "";
+    $("results").style.opacity = "1";
+
+    var leagueOk = leagueIn != null && leagueIn > 0.3 && leagueIn < 8;
+    var L = (leagueOk ? leagueIn : DEFAULT_LEAGUE) / 2;
+
+    var rH = rates(H, L), rA = rates(A, L);
+    var lh = Math.max(0.05, rH.gf * rA.ga / L);
+    var la = Math.max(0.05, rA.gf * rH.ga / L);
+
+    var models = [
+      { name: "Dixon-Coles", note: "Correction des scores serrés", w: 0.35, M: mDixonColes(lh, la) },
+      { name: "Poisson bivarié", note: "Buts corrélés", w: 0.25, M: mBivPoisson(lh, la) },
+      { name: "Poisson", note: "Modèle de référence", w: 0.20, M: mPoisson(lh, la) },
+      { name: "Binomiale négative", note: "Surdispersion", w: 0.20, M: mNegBin(lh, la) }
+    ];
+    var F = [];
+    for (var i = 0; i < N; i++) { F.push([]); for (var j = 0; j < N; j++) { var s = 0; models.forEach(function (m) { s += m.w * m.M[i][j]; }); F[i].push(s); } }
+    normalize(F);
+    var S = summarize(F);
+
+    // Confiance
+    var sample = Math.min(1, Math.min(H.mp, A.mp) / 12);
+    function drift(r) { return (r.fGF == null ? 0 : Math.abs(r.fGF - r.sGF)) + (r.fGA == null ? 0 : Math.abs(r.fGA - r.sGA)); }
+    var stability = 1 - Math.min(1, (drift(rH) + drift(rA)) / 2 / 2);
+    var clarity = Math.max(0, Math.min(1, (Math.max(S.h, S.d, S.a) - 0.34) / 0.36));
+    var conf = Math.round(100 * (0.4 * sample + 0.35 * stability + 0.25 * clarity));
+
+    render(H, A, lh, la, F, S, models, conf, { sample: sample, stability: stability, clarity: clarity, L: L, auto: !leagueOk, wH: rH.wForm, wA: rA.wForm });
+  }
+
+  // ---------- Rendu ----------
+  function render(H, A, lh, la, F, S, models, conf, meta) {
+    var hn = esc(H.name), an = esc(A.name);
+    $("r-hname").textContent = H.name; $("r-aname").textContent = A.name;
+    $("r-hxg").textContent = num(lh); $("r-axg").textContent = num(la);
+    $("r-score").textContent = S.best[0] + " – " + S.best[1];
+    $("r-scorep").textContent = "Probabilité " + pct(S.bestP) + " · cote juste " + odds(S.bestP);
+
+    $("k-total").textContent = num(lh + la);
+    $("k-total-d").textContent = "Moyenne championnat : " + num(meta.L * 2) + (meta.auto ? " (par défaut)" : "") + " · poids de la forme " + Math.round(meta.wH * 100) + " % / " + Math.round(meta.wA * 100) + " %";
+    var mode = 0; for (var k = 1; k < S.tot.length; k++) if (S.tot[k] > S.tot[mode]) mode = k;
+    $("k-mode").textContent = mode + (mode > 1 ? " buts" : " but");
+    $("k-mode-d").textContent = "Probabilité " + pct(S.tot[mode]);
+    $("k-btts").textContent = pct(S.btts);
+    $("k-btts-d").textContent = "Non : " + pct(1 - S.btts) + " · cote juste " + odds(S.btts);
+    var cls = conf >= 65 ? "hi" : conf >= 45 ? "mid" : "lo";
+    var lab = conf >= 65 ? "Élevée" : conf >= 45 ? "Modérée" : "Faible";
+    $("k-conf").innerHTML = '<span class="pill ' + cls + '">' + conf + " / 100 · " + lab + "</span>";
+    $("k-conf-d").textContent = "Échantillon " + Math.round(meta.sample * 100) + " · stabilité " + Math.round(meta.stability * 100) + " · netteté " + Math.round(meta.clarity * 100);
+
+    // Lecture du match
+    var fav = S.h >= S.a ? H.name : A.name, favP = Math.max(S.h, S.a);
+    var parts = [];
+    if (Math.abs(S.h - S.a) < 0.08) parts.push("Match équilibré : " + pct(S.h, 0) + " pour " + H.name + ", " + pct(S.a, 0) + " pour " + A.name + ", " + pct(S.d, 0) + " de nul.");
+    else parts.push(fav + " part favori avec " + pct(favP, 0) + " de chances de victoire (nul : " + pct(S.d, 0) + ").");
+    var o25 = S.over(2.5);
+    if (o25 >= 0.58) parts.push("Rencontre plutôt ouverte : " + pct(o25, 0) + " de plus de 2,5 buts.");
+    else if (o25 <= 0.42) parts.push("Rencontre plutôt fermée : " + pct(1 - o25, 0) + " de moins de 2,5 buts.");
+    else parts.push("Le seuil de 2,5 buts est indécis (" + pct(o25, 0) + " au-dessus).");
+    var w2 = 0, w2k = 0; for (var k2 = 0; k2 < 8; k2++) { var s2 = S.tot[k2] + S.tot[k2 + 1]; if (s2 > w2) { w2 = s2; w2k = k2; } }
+    parts.push("Fourchette de buts la plus probable : " + w2k + " à " + (w2k + 1) + " buts (" + pct(w2, 0) + ").");
+    parts.push("Les deux équipes marquent : " + pct(S.btts, 0) + ".");
+    $("reading").textContent = parts.join(" ");
+
+    // 1N2
+    $("b-h").style.flexBasis = (S.h * 100) + "%"; $("b-h").textContent = S.h > 0.08 ? pct(S.h, 0) : "";
+    $("b-d").style.flexBasis = (S.d * 100) + "%"; $("b-d").textContent = S.d > 0.08 ? pct(S.d, 0) : "";
+    $("b-a").style.flexBasis = (S.a * 100) + "%"; $("b-a").textContent = S.a > 0.08 ? pct(S.a, 0) : "";
+    $("l-hname").textContent = "Victoire " + H.name; $("l-aname").textContent = "Victoire " + A.name;
+    $("l-h").textContent = pct(S.h); $("l-d").textContent = pct(S.d); $("l-a").textContent = pct(S.a);
+    $("l-ho").textContent = "Cote juste " + odds(S.h); $("l-do").textContent = "Cote juste " + odds(S.d); $("l-ao").textContent = "Cote juste " + odds(S.a);
+
+    // Matrice 0..5
+    $("ax-h").textContent = H.name; $("ax-a").textContent = A.name;
+    var maxCell = 0, i, j; for (i = 0; i < 6; i++) for (j = 0; j < 6; j++) maxCell = Math.max(maxCell, F[i][j]);
+    var html = "<thead><tr><th></th>"; for (j = 0; j < 6; j++) html += "<th>" + j + "</th>"; html += "</tr></thead><tbody>";
+    for (i = 0; i < 6; i++) {
+      html += "<tr><th>" + i + "</th>";
+      for (j = 0; j < 6; j++) {
+        var p = F[i][j], t = Math.round(6 + 80 * Math.sqrt(p / maxCell));
+        var strong = t > 52;
+        html += '<td class="' + (i === S.best[0] && j === S.best[1] ? "best" : "") + '" style="background:color-mix(in srgb, var(--accent) ' + t + '%, var(--surface));color:' + (strong ? "var(--surface)" : "var(--ink)") + '" title="' + i + "-" + j + " : " + pct(p, 2) + '">' + num(p * 100, 1) + "</td>";
+      }
+      html += "</tr>";
+    }
+    $("matrix").innerHTML = html + "</tbody>";
+
+    // Top scores
+    var list = []; for (i = 0; i < N; i++) for (j = 0; j < N; j++) list.push([i, j, F[i][j]]);
+    list.sort(function (x, y) { return y[2] - x[2]; });
+    var top = list.slice(0, 8), tmax = top[0][2];
+    html = '<div class="top-row top-head"><span>#</span><span class="sc">Score</span><span></span><span class="pc">Prob.</span><span class="od">Cote</span></div>';
+    top.forEach(function (r, n) {
+      html += '<div class="top-row"><span class="rk">' + (n + 1) + '</span><span class="sc">' + r[0] + "–" + r[1] + '</span><span class="track"><span class="fill" style="display:block;width:' + (r[2] / tmax * 100).toFixed(1) + '%"></span></span><span class="pc">' + pct(r[2]) + '</span><span class="od">' + odds(r[2]) + "</span></div>";
+    });
+    $("toplist").innerHTML = html;
+
+    // Distribution des buts 0..7+
+    var d = []; for (k = 0; k < 7; k++) d.push(S.tot[k]);
+    var rest = 0; for (k = 7; k < S.tot.length; k++) rest += S.tot[k]; d.push(rest);
+    var dmax = Math.max.apply(null, d), dmaxI = d.indexOf(dmax);
+    html = ""; var hx = "";
+    d.forEach(function (p, n) {
+      html += '<div class="col' + (n === dmaxI ? " max" : "") + '"><span class="val">' + num(p * 100, 1) + '</span><div class="bar" style="height:' + (p / dmax * 82).toFixed(1) + '%"></div></div>';
+      hx += "<span>" + (n === 7 ? "7+" : n) + "</span>";
+    });
+    $("dist").innerHTML = html; $("dist-x").innerHTML = hx;
+    $("dist-note").innerHTML = "En % · axe horizontal : nombre total de buts dans le match. Le plus probable : <b>" + mode + "</b> (" + pct(S.tot[mode]) + "). Entre 1 et 3 buts : <b>" + pct(S.tot[1] + S.tot[2] + S.tot[3]) + "</b>.";
+
+    // Marchés
+    html = "<thead><tr><th>Marché</th><th>Plus</th><th>Cote</th><th>Moins</th><th>Cote</th></tr></thead><tbody>";
+    [0.5, 1.5, 2.5, 3.5, 4.5].forEach(function (x, n) {
+      var o = S.over(x), u = 1 - o;
+      html += "<tr" + (n === 4 ? ' class="sep"' : "") + "><td>" + num(x, 1) + ' buts</td><td class="' + (o >= 0.5 ? "strong" : "") + '">' + pct(o) + "</td><td>" + odds(o) + '</td><td class="' + (u > 0.5 ? "strong" : "") + '">' + pct(u) + "</td><td>" + odds(u) + "</td></tr>";
+    });
+    html += "</tbody><thead><tr><th>Autres marchés</th><th>Oui</th><th>Cote</th><th>Non</th><th>Cote</th></tr></thead><tbody>";
+    function row(label, p) { return "<tr><td>" + label + '</td><td class="' + (p >= 0.5 ? "strong" : "") + '">' + pct(p) + "</td><td>" + odds(p) + '</td><td class="' + (p < 0.5 ? "strong" : "") + '">' + pct(1 - p) + "</td><td>" + odds(1 - p) + "</td></tr>"; }
+    html += row("Les deux équipes marquent", S.btts);
+    html += row(hn + " ne prend pas de but", S.csH);
+    html += row(an + " ne prend pas de but", S.csA);
+    html += row("Double chance 1N", S.h + S.d);
+    html += row("Double chance N2", S.d + S.a);
+    html += row("Double chance 12", S.h + S.a);
+    $("markets").innerHTML = html + "</tbody>";
+
+    // Comparaison
+    html = "<thead><tr><th>Modèle</th><th>Poids</th><th>1</th><th>N</th><th>2</th><th>+2,5</th><th>BTTS</th><th>Score probable</th></tr></thead><tbody>";
+    models.forEach(function (m) {
+      var s = summarize(m.M);
+      html += "<tr><td>" + m.name + "<small>" + m.note + "</small></td><td>" + pct(m.w, 0) + "</td><td>" + pct(s.h) + "</td><td>" + pct(s.d) + "</td><td>" + pct(s.a) + "</td><td>" + pct(s.over(2.5)) + "</td><td>" + pct(s.btts) + "</td><td>" + s.best[0] + "–" + s.best[1] + " (" + pct(s.bestP) + ")</td></tr>";
+    });
+    html += '<tr class="final"><td>Ensemble<small>Pronostic retenu</small></td><td>100 %</td><td>' + pct(S.h) + "</td><td>" + pct(S.d) + "</td><td>" + pct(S.a) + "</td><td>" + pct(S.over(2.5)) + "</td><td>" + pct(S.btts) + "</td><td>" + S.best[0] + "–" + S.best[1] + " (" + pct(S.bestP) + ")</td></tr>";
+    $("cmp").innerHTML = html + "</tbody>";
+  }
+
+  // ---------- État ----------
+  function fill(data) {
+    ["h", "a"].forEach(function (p) { FIELDS.forEach(function (f) { var v = data[p][f]; $(p + "-" + f).value = v == null ? "" : v; }); });
+    $("league").value = data.league == null ? "" : data.league;
+  }
+  function snapshot() {
+    var d = { h: {}, a: {}, league: $("league").value };
+    ["h", "a"].forEach(function (p) { FIELDS.forEach(function (f) { d[p][f] = $(p + "-" + f).value; }); });
+    return d;
+  }
+  function save() { try { localStorage.setItem(STORE_KEY, JSON.stringify({ data: snapshot(), example: isExample })); } catch (e) {} }
+  function setExample(on) { isExample = on; $("banner").hidden = !on; }
+
+  document.addEventListener("input", function (e) {
+    if (!e.target.matches("input")) return;
+    if (isExample && e.target.id !== "league") setExample(false);
+    compute(); save();
+  });
+  $("btn-example").addEventListener("click", function () { fill(EXAMPLE); setExample(true); compute(); save(); });
+  $("btn-clear").addEventListener("click", function () {
+    fill({ h: { name: "" }, a: { name: "" }, league: $("league").value });
+    setExample(false); compute(); save(); $("h-name").focus();
+  });
+
+  var stored = null;
+  try { stored = JSON.parse(localStorage.getItem(STORE_KEY) || "null"); } catch (e) {}
+  if (stored && stored.data && stored.data.h) { fill(stored.data); setExample(!!stored.example); }
+  else { fill(EXAMPLE); setExample(true); }
+  compute();
+})();
+</script>
+</body>
+</html>
