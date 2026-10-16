@@ -233,7 +233,7 @@ details.method summary:focus-visible { outline: 2px solid var(--accent); outline
   .reading { padding: 12px 14px 16px; font-size: .9rem; }
   .actions button { flex: 1 1 auto; }
   .seg { display: flex; width: 100%; }
-  .seg label { flex: 1 1 0; flex-direction: column; justify-content: center; gap: 0; padding: 6px 8px; text-align: center; line-height: 1.25; }
+  .seg label { flex: 1 1 calc(33.333% - 2px); flex-direction: column; justify-content: center; gap: 0; padding: 6px 8px; text-align: center; line-height: 1.25; }
   .mk td { white-space: nowrap; }
   .mk td:first-child { white-space: normal; }
   .mk th, .mk td { padding: 8px 4px; font-size: .8rem; }
@@ -267,6 +267,9 @@ img { max-width: 100%; }
     <div class="seg" role="radiogroup" aria-label="Choix du championnat">
       <input type="radio" name="champ" id="c-ldc" value="ldc"><label for="c-ldc">Ligue des champions <b>3,37</b></label>
       <input type="radio" name="champ" id="c-ita" value="ita"><label for="c-ita">Championnat d'Italie <b>3,08</b></label>
+      <input type="radio" name="champ" id="c-esp" value="esp"><label for="c-esp">Championnat d'Espagne <b>3,13</b></label>
+      <input type="radio" name="champ" id="c-ang" value="ang"><label for="c-ang">Championnat d'Angleterre <b>3,35</b></label>
+      <input type="radio" name="champ" id="c-monde" value="monde"><label for="c-monde">Championnat du monde <b>3,03</b></label>
     </div>
   </section>
 
@@ -462,7 +465,16 @@ img { max-width: 100%; }
         "Juventus", "Liverpool", "Lombardia", "Manchester City", "Newcastle United", "Olympiacos", "Paris Saint-Germain", "Real Madrid", "Sporting Clube de Portugal", "Tottenham Hotspur"] },
     ita: { name: "Championnat d'Italie", avg: 3.08, note: "780 buts en 253 matchs",
       teams: ["Bergamo Calcio", "Bologna 1909", "Cagliari Calcio", "Como", "Cremonese", "Fiorentine", "Genoa", "Hellas Verona", "Juventus", "Latium",
-        "Lecce", "Lombardia", "Milano", "Napoli", "Parma", "Pisa", "Roma", "Sassuolo Calcio", "Torino", "Udinese Calcio"] }
+        "Lecce", "Lombardia", "Milano", "Napoli", "Parma", "Pisa", "Roma", "Sassuolo Calcio", "Torino", "Udinese Calcio"] },
+    esp: { name: "Championnat d'Espagne", avg: 3.13, note: "619 buts en 198 matchs",
+      teams: ["Athletic Bilbao", "Barcelone", "Celta", "Club Atlético de Madrid", "Deportivo Alaves", "Elche", "Espanyol", "Getafe", "Gérone", "Levante UD",
+        "Majorque", "Osasuna", "Rayo Vallecano", "Real Betis", "Real Madrid", "Real Oviedo", "Real Sociedad", "Séville", "Valencia", "Villarreal"] },
+    ang: { name: "Championnat d'Angleterre", avg: 3.35, note: "526 buts en 157 matchs",
+      teams: ["Arsenal", "Aston Villa", "Bournemouth", "Brentford", "Brighton et Hove Albion", "Burnley", "Chelsea", "Crystal Palace", "Everton", "Fulham",
+        "Leeds United", "Liverpool", "Manchester City", "Manchester United", "Newcastle United", "Nottingham Forest", "Sunderland", "Tottenham Hotspur", "West Ham United", "Wolverhampton Wanderers"] },
+    monde: { name: "Championnat du monde", avg: 3.03, note: "470 buts en 155 matchs",
+      teams: ["Allemagne", "Angleterre", "Argentine", "Croatie", "Danemark", "Espagne", "États-Unis", "France", "Ghana", "Hongrie",
+        "Italie", "Mexique", "Morocco", "Norvège", "Pays-Bas", "Pologne", "Portugal", "Qatar", "Suède", "Ukraine"] }
   };
   var DEFAULT_CHAMP = "ldc";
   var FORM_W = [0.5, 0.3, 0.2];
